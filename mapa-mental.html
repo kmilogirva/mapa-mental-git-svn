@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa Mental Git SVN</title>
+<style id="page-size"></style>
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --dot: #d9dee8;
+    --ink: #1d2433;
+    --muted: #5b6475;
+    --panel: #ffffff;
+    --line: #e3e7ef;
+    --accent: #2d7ff9;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column;
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    color: var(--ink); background: var(--bg);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+
+  /* ---------- Barra superior ---------- */
+  .toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 8px 16px; background: var(--panel);
+    border-bottom: 1px solid var(--line); box-shadow: 0 1px 6px rgba(20,30,60,.06);
+    z-index: 10;
+  }
+  .brand { font-weight: 700; font-size: 15px; margin-right: 10px; display: flex; align-items: center; gap: 8px; }
+  .brand .logo {
+    width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #2d7ff9, #8e5cd9); color: #fff; font-size: 14px;
+  }
+  .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+  .toolbar button {
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+    font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 7px; cursor: pointer;
+    white-space: nowrap;
+  }
+  .toolbar button:hover { background: #f0f4fb; border-color: #cfd7e6; }
+  .toolbar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .toolbar button.primary:hover { background: #1f6fe6; }
+  .zoom { font-size: 12px; color: var(--muted); min-width: 42px; text-align: center; }
+  .spacer { flex: 1; }
+
+  /* ---------- Lienzo ---------- */
+  #viewport {
+    position: relative; flex: 1; overflow: hidden; cursor: grab;
+    background-color: var(--bg);
+    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+    background-size: 22px 22px;
+    touch-action: none;
+  }
+  #viewport.dragging { cursor: grabbing; }
+  #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #links { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+  #links path { fill: none; stroke-linecap: round; }
+
+  /* ---------- Nodos ---------- */
+  .node {
+    position: absolute; left: 0; top: 0; cursor: pointer; user-select: none;
+    width: max-content; line-height: 1.3; white-space: normal; overflow-wrap: anywhere;
+    transition: box-shadow .15s;
+  }
+  .node.d0 {
+    background: #1f2a44; color: #fff; font-size: 22px; font-weight: 700;
+    padding: 16px 24px; border-radius: 18px; max-width: 330px; text-align: center;
+    box-shadow: 0 6px 18px rgba(31,42,68,.28);
+  }
+  .node.d1 {
+    background: var(--c); color: #fff; font-size: 17px; font-weight: 700;
+    padding: 10px 16px; border-radius: 12px; max-width: 240px;
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--c) 35%, transparent);
+  }
+  .node.d2 {
+    background: color-mix(in srgb, var(--c) 11%, #fff); border: 2px solid var(--c);
+    font-size: 14px; font-weight: 600; padding: 6px 11px; border-radius: 9px; max-width: 240px;
+  }
+  .node.d3 {
+    font-size: 13.5px; font-weight: 500; padding: 3px 5px; max-width: 270px;
+    border-bottom: 2.5px solid var(--c);
+  }
+  .node.d4 {
+    font-size: 13px; padding: 2px 5px; max-width: 290px; color: #2b3242;
+    border-bottom: 2px solid color-mix(in srgb, var(--c) 70%, #fff);
+  }
+  .node.ex { font-style: italic; color: var(--muted); border-bottom-style: dashed; }
+  .node.note {
+    background: #fff8db; border: 1px solid #efd77a; border-bottom: 2px solid #e4c24a;
+    border-radius: 6px; padding: 3px 7px; color: #5d4a0c;
+  }
+  .node b { font-weight: 700; }
+  .node code {
+    font-family: Consolas, "Cascadia Mono", "Courier New", monospace; font-size: .92em; font-style: normal;
+    background: rgba(15,23,42,.07); color: #0b3a75; padding: 1px 5px; border-radius: 4px;
+  }
+  .node.d1 code, .node.d0 code { background: rgba(255,255,255,.2); color: #fff; }
+  .node:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, #1f2a44) 25%, transparent); }
+  .node.sel { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .node.editing { cursor: text; user-select: text; outline: 3px solid #f5821f; outline-offset: 3px; background-clip: padding-box; }
+  .node.editing:not(.d0):not(.d1) { background: #fff; }
+
+  .toggle {
+    position: absolute; width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--c); background: #fff; color: var(--c);
+    font-size: 10px; font-weight: 700; display: grid; place-items: center;
+    cursor: pointer; user-select: none; line-height: 1;
+  }
+  .toggle.closed { background: var(--c); color: #fff; width: auto; min-width: 20px; padding: 0 4px; border-radius: 9px; }
+  .toggle:hover { transform: scale(1.15); }
+
+  /* ---------- Ayuda inferior ---------- */
+  .hint {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: rgba(255,255,255,.95); border: 1px solid var(--line); border-radius: 10px;
+    padding: 7px 14px; font-size: 12px; color: var(--muted); box-shadow: 0 4px 14px rgba(20,30,60,.08);
+    width: max-content; max-width: calc(100% - 32px); text-align: center; pointer-events: none;
+  }
+  .hint kbd {
+    font-family: inherit; font-size: 11px; background: #eef1f6; border: 1px solid #d8dde7;
+    border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--ink);
+  }
+
+  @media (max-width: 640px) {
+    .toolbar { padding: 8px; }
+    .brand span.t { display: none; }
+    .hint { display: none; }
+  }
+
+  @media print {
+    html, body { height: auto; background: #fff; }
+    .toolbar, .hint, .toggle { display: none !important; }
+    #viewport { flex: none; background: #fff; }
+    .node.sel { outline: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="brand"><div class="logo">🧠</div><span class="t">Mapa mental · AA2</span></div>
+  <button id="b-child" title="Agregar subtema (Tab)">＋ Subtema</button>
+  <button id="b-sib" title="Agregar tema hermano (Enter)">＋ Hermano</button>
+  <button id="b-edit" title="Editar (doble clic o F2)">✏️ Editar</button>
+  <button id="b-del" title="Eliminar (Supr)">🗑️ Eliminar</button>
+  <button id="b-undo" title="Deshacer (Ctrl+Z)">↶ Deshacer</button>
+  <div class="sep"></div>
+  <button id="b-l1">Nivel 1</button>
+  <button id="b-l2">Nivel 2</button>
+  <button id="b-l3">Nivel 3</button>
+  <button id="b-all">Expandir todo</button>
+  <div class="sep"></div>
+  <button id="b-zout" title="Alejar">−</button>
+  <span class="zoom" id="zoom">100%</span>
+  <button id="b-zin" title="Acercar">＋</button>
+  <button id="b-fit" title="Ajustar a pantalla">⤢ Ajustar</button>
+  <div class="spacer"></div>
+  <button id="b-reset" title="Volver al mapa original">↺ Restablecer</button>
+  <button id="b-pdf" class="primary" title="Guardar como PDF">⬇ Exportar PDF</button>
+</div>
+
+<div id="viewport">
+  <div id="world"><svg id="links"></svg></div>
+  <div class="hint">
+    <kbd>Doble clic</kbd> editar · <kbd>Tab</kbd> subtema · <kbd>Enter</kbd> hermano · <kbd>Supr</kbd> borrar ·
+    <kbd>Espacio</kbd> plegar · <kbd>Ctrl+Z</kbd> deshacer · <kbd>Rueda</kbd> zoom · arrastra el fondo para moverte
+  </div>
+</div>
+
+<!-- Contenido del mapa: cada 2 espacios de sangría = un nivel. `texto` = comando. "Ej:" = ejemplo. "Nota:" = nota. -->
+<script type="text/plain" id="src">
+Herramientas de control de versiones: Git y SVN
+  📘 Conceptos fundamentales
+    ❓ ¿Qué es el control de versiones?
+      Sistema que registra los cambios de archivos en el tiempo
+      Permite volver a cualquier versión anterior
+      Nota: también se llama VCS (Version Control System)
+    🔑 Conceptos clave
+      Repositorio
+        Almacén de archivos + historial completo
+      Commit
+        Instantánea de cambios con un mensaje
+      Rama (branch)
+        Línea de desarrollo independiente
+      Fusión (merge)
+        Une los cambios de dos ramas
+      Conflicto
+        Cambios incompatibles en la misma línea
+    🧭 Tipos de sistemas
+      Locales
+        Historial solo en un equipo
+      Centralizados (CVCS)
+        Un único servidor guarda el historial
+        Ej: SVN, CVS
+      Distribuidos (DVCS)
+        Cada copia tiene todo el historial
+        Ej: Git, Mercurial
+    ⭐ Ventajas
+      Historial completo: quién, qué, cuándo y por qué
+      Trabajo colaborativo en paralelo
+      Recuperar versiones estables ante errores
+      Respaldo del código
+      Trazabilidad y auditoría
+  🌿 Git
+    ℹ️ Generalidades
+      Creado por Linus Torvalds (2005)
+      Libre y de código abierto
+      Plataformas: GitHub, GitLab, Bitbucket
+    🌐 Tipo de control: DISTRIBUIDO
+      Cada clon es un repositorio completo
+      Permite trabajar sin conexión
+      No depende de un único servidor
+    🏗️ Estructura de trabajo
+      1. Directorio de trabajo
+        Archivos que editas → estado "modificado"
+      2. Staging area (índice)
+        Cambios preparados para el próximo commit
+        Ej: `git add archivo.txt`
+      3. Repositorio local (.git)
+        Historial guardado en tu equipo → "confirmado"
+        Ej: `git commit`
+      4. Repositorio remoto
+        Copia compartida (GitHub, GitLab)
+        Ej: `git push` / `git pull`
+      Nota: flujo editar → add → commit → push
+    ⌨️ Comandos esenciales
+      `git init`
+        Crea un repositorio nuevo
+        Ej: `git init mi-proyecto`
+      `git clone`
+        Copia un repositorio remoto completo
+        Ej: `git clone https://github.com/usuario/repo.git`
+      `git commit`
+        Guarda los cambios en el repositorio local
+        Ej: `git commit -m "Agrega formulario de login"`
+      `git push`
+        Sube los commits locales al remoto
+        Ej: `git push origin main`
+      `git pull`
+        Descarga e integra cambios (fetch + merge)
+        Ej: `git pull origin main`
+      `git merge`
+        Fusiona otra rama en la rama actual
+        Ej: `git merge feature/login`
+      `git branch`
+        Lista, crea o elimina ramas
+        Ej: `git branch feature/login`
+      Comandos de apoyo
+        `git status` → estado de archivos
+        `git log` → historial de commits
+        `git diff` → ver diferencias
+        `git switch` → cambiar de rama
+    🔀 Ramas y fusiones
+      Rama principal: main / master
+        Código estable, listo para producción
+      Ramas temáticas
+        `feature/` → nuevas funcionalidades
+        `fix/` → corrección de errores
+        `release/` → preparar versiones
+      Crear y cambiar de rama
+        Ej: `git switch -c feature/pagos`
+      Tipos de fusión
+        Fast-forward: avanza sin commit extra
+        Three-way: crea un commit de fusión
+        Rebase: reaplica commits, historial lineal
+      Pull Request: revisión antes de fusionar
+    ⚔️ Resolución de conflictos
+      ¿Cuándo ocurre?
+        Dos ramas modifican la misma línea
+        Archivo editado en una rama y borrado en otra
+      Marcas en el archivo
+        `<<<<<<< HEAD` → tus cambios
+        `=======` → separador
+        `>>>>>>> rama` → cambios entrantes
+      Pasos para resolver
+        1. `git status` → ver archivos en conflicto
+        2. Editar y elegir el código correcto
+        3. Borrar las marcas de conflicto
+        4. `git add archivo`
+        5. `git commit`
+      Cancelar fusión: `git merge --abort`
+      Herramientas: VS Code, git mergetool
+  🏛️ SVN (Subversion)
+    ℹ️ Generalidades
+      Creado por CollabNet (2000)
+      Proyecto de Apache Software Foundation
+      Sucesor de CVS
+    🖥️ Tipo de control: CENTRALIZADO
+      Un único servidor con el repositorio
+      Cada usuario tiene una "copia de trabajo"
+      Requiere conexión para commit y log
+      Revisiones numeradas: r1, r2, r3…
+    ⌨️ Comandos principales
+      `svn checkout`
+        Descarga una copia de trabajo
+        Ej: `svn checkout http://servidor/repo/trunk`
+      `svn update`
+        Trae los últimos cambios del servidor
+        Ej: `svn update`
+      `svn commit`
+        Envía los cambios directo al servidor
+        Ej: `svn commit -m "Corrige reporte"`
+      Comandos de apoyo
+        `svn add` → agregar archivos
+        `svn status` → ver estado
+        `svn log` → ver historial
+        `svn copy` → crear ramas o tags
+    📁 Estructura de carpetas
+      `/trunk`
+        Línea principal de desarrollo (≈ main)
+      `/branches`
+        Ramas para funciones o versiones
+        Ej: `/branches/version-2.0`
+      `/tags`
+        Versiones publicadas, no se modifican
+        Ej: `/tags/v1.0.0`
+    👍 Ventajas frente a Git
+      Más fácil de aprender
+      Permisos de acceso por carpeta
+      Mejor con archivos binarios grandes
+      Bloqueo de archivos (`svn lock`)
+      Descarga parcial del repositorio
+    👎 Limitaciones frente a Git
+      Necesita conexión al servidor
+      Servidor = punto único de falla
+      Ramas y fusiones más lentas
+      No hay commits locales
+      Comunidad más reducida
+  ⚖️ Comparativa Git vs SVN
+    🌐 Modelo de control
+      Git: distribuido
+        Historial completo en cada equipo
+      SVN: centralizado
+        Historial solo en el servidor
+    🤸 Flexibilidad
+      Git: ramas ligeras y rápidas
+      SVN: ramas = copias de carpetas
+    📈 Escalabilidad
+      Git: equipos grandes y distribuidos
+        Ej: kernel de Linux, proyectos open source
+      SVN: equipos con servidor central
+    📴 Uso sin conexión
+      Git: SÍ (commit, log, diff, branch)
+      SVN: NO (commit y log requieren servidor)
+    🔢 Identificación de versiones
+      Git: hash, ej. `a3f5c9e`
+      SVN: número secuencial, ej. `r101`
+    🎓 Curva de aprendizaje
+      Git: más compleja al inicio
+      SVN: más sencilla
+    🎯 Escenarios recomendados
+      Usar Git cuando…
+        Proyectos open source
+        Equipos remotos o distribuidos
+        Metodologías ágiles y DevOps (CI/CD)
+        Uso intensivo de ramas
+      Usar SVN cuando…
+        Control centralizado empresarial
+        Permisos estrictos por carpeta
+        Muchos binarios (diseño, videojuegos)
+        Se necesita bloquear archivos
+  ✅ Buenas prácticas
+    📝 Commits frecuentes y descriptivos
+      Un commit = un cambio lógico
+      Mensaje claro en imperativo
+        Ej bueno: "Agrega validación de correo"
+        Ej malo: "cambios", "arreglos"
+      Prefijos: `feat:` `fix:` `docs:` `refactor:`
+    🛡️ Evitar conflictos de fusión
+      Sincronizar seguido (`git pull` / `svn update`)
+      Ramas de vida corta
+      Dividir el trabajo por módulos
+      Avisar al equipo qué archivos editas
+    🌱 Uso de ramas temáticas
+      Una rama por funcionalidad o corrección
+      Nombres claros: `feature/carrito`, `fix/login`
+      Eliminar ramas ya fusionadas
+    🤝 Coordinación en equipos
+      Revisión de código (Pull Requests)
+      Flujo de trabajo definido
+        Git Flow
+        GitHub Flow
+        Trunk-based development
+      Proteger la rama principal
+      Integración continua (pruebas automáticas)
+    ➕ Otras prácticas
+      Usar `.gitignore` / `svn:ignore`
+      No subir contraseñas ni claves
+      Etiquetar versiones (`git tag v1.0`)
+  ⚠️ Errores comunes a evitar
+    📄 No documentar los cambios
+      Consecuencia: historial imposible de entender
+      Solución: mensajes de commit descriptivos
+    🚫 Trabajar directo en la rama principal
+      Consecuencia: código inestable en producción
+      Solución: ramas temáticas + Pull Requests
+    🙈 Ignorar conflictos sin revisarlos
+      Consecuencia: pérdida de código o errores ocultos
+      Solución: revisar línea por línea y probar
+    🧩 Otros errores frecuentes
+      Commits enormes → commits pequeños
+      Subir archivos pesados → usar `.gitignore`
+      `git push --force` en ramas compartidas → evitarlo
+      No sincronizar al iniciar → `git pull` / `svn update`
+</script>
+
+<script>
+(() => {
+  const PALETTE = ['#2d7ff9', '#f5821f', '#8e5cd9', '#2ead5b', '#13a89e', '#e5484d'];
+  const STORE_KEY = 'mapa-git-svn-v1';
+  const GAP_ROOT = 84, GAP = 46;
+  const VGAP = d => d === 1 ? 30 : d === 2 ? 14 : 7;
+
+  const viewport = document.getElementById('viewport');
+  const world = document.getElementById('world');
+  const zoomLabel = document.getElementById('zoom');
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  let seq = 0;
+  const uid = () => 'n' + (++seq) + Math.random().toString(36).slice(2, 6);
+
+  // ---------- Modelo ----------
+  function parse(txt) {
+    let root = null; const stack = [];
+    txt.split('\n').filter(l => l.trim()).forEach(line => {
+      const indent = Math.floor(line.match(/^ */)[0].length / 2);
+      const node = { id: uid(), text: line.trim(), children: [], collapsed: false };
+      if (indent === 0 || !root) { root = node; stack.length = 0; stack[0] = node; return; }
+      stack.length = indent;
+      stack[indent - 1].children.push(node);
+      stack[indent] = node;
+    });
+    walkAll(root, (n, d) => { if (d >= 3 && n.children.length) n.collapsed = true; });
+    return root;
+  }
+  const clean = n => ({ id: n.id, text: n.text, collapsed: n.collapsed, children: n.children.map(clean) });
+  const hydrate = o => ({ id: o.id || uid(), text: String(o.text ?? ''), collapsed: !!o.collapsed, children: (o.children || []).map(hydrate) });
+  function walkAll(n, fn, d = 0, p = null) { fn(n, d, p); n.children.forEach(c => walkAll(c, fn, d + 1, n)); }
+
+  const defaultTree = () => parse(document.getElementById('src').textContent);
+  let root;
+  try {
+    const saved = localStorage.getItem(STORE_KEY);
+    root = saved ? hydrate(JSON.parse(saved)) : defaultTree();
+  } catch (e) { root = defaultTree(); }
+
+  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(clean(root))); } catch (e) {} }
+
+  const history = [];
+  function snapshot() { history.push(JSON.stringify(clean(root))); if (history.length > 80) history.shift(); }
+  function undo() {
+    if (!history.length) return;
+    root = hydrate(JSON.parse(history.pop()));
+    render(); save();
+  }
+
+  // ---------- Estado de vista ----------
+  let view = { x: 0, y: 0, s: 1 };
+  let selectedId = root.id;
+  let editing = null;
+  let visible = [];
+  const byId = new Map();
+
+  function applyView() {
+    world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
+    zoomLabel.textContent = Math.round(view.s * 100) + '%';
+  }
+
+  // ---------- Texto ----------
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function fmt(t) {
+    const parts = t.split('`');
+    let html = parts.map((p, i) => i % 2 ? '<code>' + esc(p) + '</code>' : esc(p)).join('');
+    html = html.replace(/^([^:<&]{1,24}):(\s)/, '<b>$1:</b>$2');
+    return html;
+  }
+
+  // ---------- Render ----------
+  function render() {
+    world.querySelectorAll('.node, .toggle').forEach(e => e.remove());
+    const svg = document.getElementById('links');
+    svg.innerHTML = '';
+    visible = []; byId.clear();
+
+    walkAll(root, (n, d, p) => { n.parent = p; n.depth = d; byId.set(n.id, n); });
+    root.color = '#1f2a44';
+    root.children.forEach((c, i) => walkAll(c, n => { n.color = PALETTE[i % PALETTE.length]; }));
+
+    (function addVisible(n) {
+      visible.push(n);
+      const el = document.createElement('div');
+      const lvl = Math.min(n.depth, 4);
+      el.className = 'node d' + lvl;
+      if (n.depth >= 3 && /^ej\b/i.test(n.text)) el.classList.add('ex');
+      if (n.depth >= 2 && /^nota\b/i.test(n.text)) el.classList.add('note');
+      if (n.id === selectedId) el.classList.add('sel');
+      el.style.setProperty('--c', n.color);
+      el.dataset.id = n.id;
+      el.innerHTML = fmt(n.text);
+      world.appendChild(el);
+      n.el = el;
+      if (!n.collapsed) n.children.forEach(addVisible);
+    })(root);
+
+    visible.forEach(n => { n.w = n.el.offsetWidth; n.h = n.el.offsetHeight; });
+    layout();
+
+    visible.forEach(n => {
+      n.el.style.left = n.x + 'px';
+      n.el.style.top = n.y + 'px';
+    });
+
+    visible.forEach(n => {
+      if (n === root) return;
+      // conector desde el padre
+      const p = n.parent;
+      const a = outAnchor(p, n.side), b = inAnchor(n, n.side);
+      const mid = (a.x + b.x) / 2;
+      const path = document.createElementNS(SVGNS, 'path');
+      path.setAttribute('d', `M${a.x},${a.y} C${mid},${a.y} ${mid},${b.y} ${b.x},${b.y}`);
+      path.setAttribute('stroke', n.color);
+      path.setAttribute('stroke-width', n.depth === 1 ? 5 : n.depth === 2 ? 3 : 2);
+      if (n.depth >= 3) path.setAttribute('stroke-opacity', '.75');
+      svg.appendChild(path);
+
+      // botón plegar / desplegar
+      if (n.children.length) {
+        const t = document.createElement('div');
+        t.className = 'toggle' + (n.collapsed ? ' closed' : '');
+        t.style.setProperty('--c', n.color);
+        t.textContent = n.collapsed ? countAll(n) : '−';
+        t.title = n.collapsed ? 'Desplegar' : 'Plegar';
+        t.dataset.toggle = n.id;
+        const o = outAnchor(n, n.side);
+        world.appendChild(t);
+        const tw = t.offsetWidth;
+        t.style.left = (n.side > 0 ? o.x + 4 : o.x - 4 - tw) + 'px';
+        t.style.top = (o.y - 9) + 'px';
+      }
+    });
+  }
+
+  const countAll = n => n.children.reduce((s, c) => s + 1 + countAll(c), 0);
+
+  function outAnchor(n, side) {
+    if (n === root) return { x: side > 0 ? n.x + n.w : n.x, y: n.y + n.h / 2 };
+    const yy = n.depth >= 3 ? n.y + n.h : n.y + n.h / 2;
+    return { x: side > 0 ? n.x + n.w : n.x, y: yy };
+  }
+  function inAnchor(n, side) {
+    const yy = n.depth >= 3 ? n.y + n.h : n.y + n.h / 2;
+    return { x: side > 0 ? n.x : n.x + n.w, y: yy };
+  }
+
+  function subH(n) {
+    const kids = n.collapsed ? [] : n.children;
+    if (!kids.length) return (n.sh = n.h);
+    const sum = kids.reduce((s, c) => s + subH(c), 0) + VGAP(n.depth + 1) * (kids.length - 1);
+    return (n.sh = Math.max(n.h, sum));
+  }
+
+  function placeList(list, side, ax, cy, depth) {
+    if (!list.length) return;
+    list.forEach(subH);
+    const total = list.reduce((s, c) => s + c.sh, 0) + VGAP(depth) * (list.length - 1);
+    let y = cy - total / 2;
+    list.forEach(c => {
+      const ccy = y + c.sh / 2;
+      c.side = side;
+      c.x = side > 0 ? ax : ax - c.w;
+      c.y = ccy - c.h / 2;
+      if (!c.collapsed && c.children.length) {
+        placeList(c.children, side, side > 0 ? c.x + c.w + GAP : c.x - GAP, ccy, depth + 1);
+      }
+      y += c.sh + VGAP(depth);
+    });
+  }
+
+  function layout() {
+    root.x = -root.w / 2; root.y = -root.h / 2; root.side = 1;
+    const kids = root.children;
+    const nr = Math.ceil(kids.length / 2);
+    placeList(kids.slice(0, nr), 1, root.w / 2 + GAP_ROOT, 0, 1);
+    placeList(kids.slice(nr), -1, -root.w / 2 - GAP_ROOT, 0, 1);
+  }
+
+  function bounds() {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    visible.forEach(n => {
+      minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x + n.w); maxY = Math.max(maxY, n.y + n.h);
+    });
+    return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+  }
+
+  function fit() {
+    const b = bounds(), pad = 50;
+    const vw = viewport.clientWidth, vh = viewport.clientHeight;
+    const s = Math.min((vw - pad * 2) / b.w, (vh - pad * 2) / b.h, 1.2);
+    view.s = Math.max(0.12, s);
+    view.x = vw / 2 - (b.minX + b.w / 2) * view.s;
+    view.y = vh / 2 - (b.minY + b.h / 2) * view.s;
+    applyView();
+  }
+
+  function zoomAt(factor, cx, cy) {
+    const ns = Math.min(3, Math.max(0.12, view.s * factor));
+    view.x = cx - (cx - view.x) * (ns / view.s);
+    view.y = cy - (cy - view.y) * (ns / view.s);
+    view.s = ns;
+    applyView();
+  }
+
+  // ---------- Edición ----------
+  function select(id) {
+    selectedId = id;
+    world.querySelectorAll('.node.sel').forEach(e => e.classList.remove('sel'));
+    const n = byId.get(id);
+    if (n && n.el) n.el.classList.add('sel');
+  }
+
+  function startEdit(n) {
+    if (!n || !n.el) return;
+    editing = n;
+    const el = n.el;
+    el.classList.add('editing');
+    try { el.contentEditable = 'plaintext-only'; } catch (e) { el.contentEditable = 'true'; }
+    if (el.contentEditable !== 'plaintext-only') el.contentEditable = 'true';
+    el.textContent = n.text;
+    el.focus();
+    const r = document.createRange(); r.selectNodeContents(el);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+
+    el.onkeydown = e => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finishEdit(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finishEdit(false); }
+      else if (e.key === 'Tab') { e.preventDefault(); finishEdit(true); addChild(); }
+    };
+    el.onblur = () => finishEdit(true);
+  }
+
+  function finishEdit(commit) {
+    if (!editing) return;
+    const n = editing; editing = null;
+    const el = n.el; el.onblur = null; el.onkeydown = null;
+    const txt = el.textContent.replace(/\s+/g, ' ').trim();
+    if (commit && txt && txt !== n.text) { snapshot(); n.text = txt; save(); }
+    render();
+  }
+
+  function addChild() {
+    const p = byId.get(selectedId); if (!p) return;
+    snapshot();
+    const n = { id: uid(), text: 'Nuevo tema', children: [], collapsed: false };
+    p.children.push(n); p.collapsed = false;
+    selectedId = n.id; render(); save();
+    startEdit(byId.get(n.id));
+  }
+
+  function addSibling() {
+    const cur = byId.get(selectedId);
+    if (!cur || !cur.parent) return addChild();
+    snapshot();
+    const n = { id: uid(), text: 'Nuevo tema', children: [], collapsed: false };
+    const sibs = cur.parent.children;
+    sibs.splice(sibs.indexOf(cur) + 1, 0, n);
+    selectedId = n.id; render(); save();
+    startEdit(byId.get(n.id));
+  }
+
+  function removeSelected() {
+    const cur = byId.get(selectedId);
+    if (!cur || !cur.parent) return;
+    snapshot();
+    const sibs = cur.parent.children;
+    sibs.splice(sibs.indexOf(cur), 1);
+    selectedId = cur.parent.id; render(); save();
+  }
+
+  function toggle(id) {
+    const n = byId.get(id); if (!n || !n.children.length || n === root) return;
+    n.collapsed = !n.collapsed; render(); save();
+  }
+
+  function setLevel(L) {
+    walkAll(root, (n, d) => { n.collapsed = d > 0 && d >= L && n.children.length > 0; });
+    render(); save(); fit();
+  }
+
+  // ---------- Eventos ----------
+  world.addEventListener('click', e => {
+    const t = e.target.closest('.toggle');
+    if (t) { toggle(t.dataset.toggle); return; }
+    const nEl = e.target.closest('.node');
+    if (nEl && !nEl.classList.contains('editing')) select(nEl.dataset.id);
+  });
+  world.addEventListener('dblclick', e => {
+    const nEl = e.target.closest('.node');
+    if (nEl && !editing) { select(nEl.dataset.id); startEdit(byId.get(nEl.dataset.id)); }
+  });
+
+  let drag = null;
+  viewport.addEventListener('pointerdown', e => {
+    if (e.target.closest('.node, .toggle')) return;
+    if (editing) finishEdit(true);
+    drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false };
+    viewport.setPointerCapture(e.pointerId);
+    viewport.classList.add('dragging');
+  });
+  viewport.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    view.x = drag.vx + dx; view.y = drag.vy + dy; applyView();
+  });
+  const endDrag = () => { drag = null; viewport.classList.remove('dragging'); };
+  viewport.addEventListener('pointerup', endDrag);
+  viewport.addEventListener('pointercancel', endDrag);
+
+  viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = viewport.getBoundingClientRect();
+    zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+
+  document.addEventListener('keydown', e => {
+    if (editing) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+    if (e.target.closest && e.target.closest('input, textarea')) return;
+    switch (e.key) {
+      case 'Tab': e.preventDefault(); addChild(); break;
+      case 'Enter': e.preventDefault(); addSibling(); break;
+      case 'Delete': case 'Backspace': e.preventDefault(); removeSelected(); break;
+      case ' ': e.preventDefault(); toggle(selectedId); break;
+      case 'F2': e.preventDefault(); startEdit(byId.get(selectedId)); break;
+      case '+': case '=': zoomAt(1.2, viewport.clientWidth / 2, viewport.clientHeight / 2); break;
+      case '-': zoomAt(1 / 1.2, viewport.clientWidth / 2, viewport.clientHeight / 2); break;
+    }
+  });
+
+  const on = (id, fn) => document.getElementById(id).addEventListener('click', fn);
+  on('b-child', addChild);
+  on('b-sib', addSibling);
+  on('b-edit', () => startEdit(byId.get(selectedId)));
+  on('b-del', removeSelected);
+  on('b-undo', undo);
+  on('b-l1', () => { snapshot(); setLevel(1); });
+  on('b-l2', () => { snapshot(); setLevel(2); });
+  on('b-l3', () => { snapshot(); setLevel(3); });
+  on('b-all', () => { snapshot(); setLevel(99); });
+  on('b-zin', () => zoomAt(1.2, viewport.clientWidth / 2, viewport.clientHeight / 2));
+  on('b-zout', () => zoomAt(1 / 1.2, viewport.clientWidth / 2, viewport.clientHeight / 2));
+  on('b-fit', fit);
+  on('b-reset', () => {
+    if (!confirm('¿Volver al mapa original? Se perderán tus cambios.')) return;
+    snapshot(); root = defaultTree(); selectedId = root.id; render(); save(); fit();
+  });
+
+  // ---------- Exportar a PDF (una sola página del tamaño del mapa) ----------
+  const pageStyle = document.getElementById('page-size');
+  let saved = null;
+  on('b-pdf', () => {
+    if (editing) finishEdit(true);
+    const b = bounds(), pad = 40;
+    const W = Math.ceil(b.w + pad * 2), H = Math.ceil(b.h + pad * 2);
+    saved = { ...view };
+    pageStyle.textContent = `@page { size: ${W}px ${H}px; margin: 0; }`;
+    viewport.style.width = W + 'px';
+    viewport.style.height = H + 'px';
+    view = { x: pad - b.minX, y: pad - b.minY, s: 1 };
+    applyView();
+    setTimeout(() => window.print(), 60);
+  });
+  window.addEventListener('afterprint', () => {
+    if (!saved) return;
+    viewport.style.width = ''; viewport.style.height = '';
+    pageStyle.textContent = '';
+    view = saved; saved = null; applyView();
+  });
+
+  window.addEventListener('resize', () => applyView());
+
+  render();
+  fit();
+})();
+</script>
+</body>
+</html>
